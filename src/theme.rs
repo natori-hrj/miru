@@ -18,6 +18,19 @@ window, .zako-root {
   min-height: 40px;
   padding: 0 14px;
 }
+.zako-sidebar-toggle {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #777579;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 4px;
+}
+.zako-sidebar-toggle:hover {
+  background: #19191a;
+  color: #e0e0e1;
+}
 .zako-brand {
   color: #e0e0e1;
   font-size: 11pt;

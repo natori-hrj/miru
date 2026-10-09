@@ -15,6 +15,7 @@ pub struct AppState {
     application: gtk::Application,
     repository: Repository,
     sidebar: gtk::Box,
+    sidebar_toggle_button: gtk::Button,
     file_list: gtk::ListBox,
     diff_view: DiffView,
     count_label: gtk::Label,
@@ -44,6 +45,10 @@ pub fn build(application: &gtk::Application, repository: Repository) {
 
     let header = gtk::HeaderBar::new();
     header.add_css_class("zako-header");
+    let sidebar_toggle_button = gtk::Button::with_label("‹");
+    sidebar_toggle_button.add_css_class("zako-sidebar-toggle");
+    sidebar_toggle_button.set_tooltip_text(Some("Hide changed files (Tab)"));
+    header.pack_start(&sidebar_toggle_button);
     let repo_name = repository
         .root()
         .file_name()
@@ -106,6 +111,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
         application: application.clone(),
         repository,
         sidebar,
+        sidebar_toggle_button: sidebar_toggle_button.clone(),
         file_list: file_list.clone(),
         diff_view,
         count_label,
@@ -125,6 +131,13 @@ pub fn build(application: &gtk::Application, repository: Repository) {
         let Some(row) = row else { return };
         if let Ok(mut state) = callback_state.try_borrow_mut() {
             state.select_index(row.index() as usize);
+        }
+    });
+
+    let callback_state = state.clone();
+    sidebar_toggle_button.connect_clicked(move |_| {
+        if let Ok(mut state) = callback_state.try_borrow_mut() {
+            state.toggle_sidebar();
         }
     });
 
@@ -183,7 +196,16 @@ impl AppState {
     }
 
     pub fn toggle_sidebar(&mut self) {
-        self.sidebar.set_visible(!self.sidebar.is_visible());
+        let visible = !self.sidebar.is_visible();
+        self.sidebar.set_visible(visible);
+        self.sidebar_toggle_button
+            .set_label(if visible { "‹" } else { "›" });
+        self.sidebar_toggle_button
+            .set_tooltip_text(Some(if visible {
+                "Hide changed files (Tab)"
+            } else {
+                "Show changed files (Tab)"
+            }));
     }
 
     fn move_file(&mut self, delta: isize) {
