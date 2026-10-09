@@ -8,6 +8,7 @@ use super::{ChangedFile, DiffDocument, StatusSnapshot, parse_diff, parse_status}
 pub struct Repository {
     root: PathBuf,
     git_dir: PathBuf,
+    disabled_filters: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -48,9 +49,7 @@ impl Repository {
             return Err(GitError::InvalidDirectory(target));
         }
 
-        let root_output = Command::new("git")
-            .arg("-C")
-            .arg(&target)
+        let root_output = git_command(&target, &[])
             .args(["rev-parse", "--show-toplevel"])
             .output()
             .map_err(|error| GitError::Command {
@@ -62,9 +61,7 @@ impl Repository {
         }
         let root = output_path(root_output)?;
 
-        let git_output = Command::new("git")
-            .arg("-C")
-            .arg(&root)
+        let git_output = git_command(&root, &[])
             .args(["rev-parse", "--absolute-git-dir"])
             .output()
             .map_err(|error| GitError::Command {
@@ -75,9 +72,11 @@ impl Repository {
             return Err(command_error("rev-parse", git_output));
         }
 
+        let disabled_filters = configured_filter_commands(&root)?;
         Ok(Self {
             root,
             git_dir: output_path(git_output)?,
+            disabled_filters,
         })
     }
 
@@ -105,13 +104,12 @@ impl Repository {
     pub fn diff(&self, file: &ChangedFile) -> Result<DiffDocument, GitError> {
         let absolute_path = self.root.join(&file.path);
         let output = match file.kind {
-            super::FileKind::Untracked => Command::new("git")
-                .arg("-C")
-                .arg(&self.root)
+            super::FileKind::Untracked => git_command(&self.root, &self.disabled_filters)
                 .args([
                     "diff",
                     "--no-index",
                     "--no-ext-diff",
+                    "--no-textconv",
                     "--no-color",
                     "--unified=3",
                     "--",
@@ -131,6 +129,7 @@ impl Repository {
                 let args = [
                     "diff",
                     "--no-ext-diff",
+                    "--no-textconv",
                     "--no-color",
                     "--unified=3",
                     "--find-renames",
@@ -146,6 +145,7 @@ impl Repository {
                         let staged = self.run_git(&[
                             "diff",
                             "--no-ext-diff",
+                            "--no-textconv",
                             "--no-color",
                             "--unified=3",
                             "--cached",
@@ -155,6 +155,7 @@ impl Repository {
                         let unstaged = self.run_git(&[
                             "diff",
                             "--no-ext-diff",
+                            "--no-textconv",
                             "--no-color",
                             "--unified=3",
                             "--",
@@ -180,9 +181,7 @@ impl Repository {
     }
 
     fn run_git(&self, args: &[&str]) -> Result<Output, GitError> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&self.root)
+        let output = git_command(&self.root, &self.disabled_filters)
             .args(args)
             .output()
             .map_err(|error| GitError::Command {
@@ -199,13 +198,57 @@ impl Repository {
     }
 
     fn has_head(&self) -> bool {
-        Command::new("git")
-            .arg("-C")
-            .arg(&self.root)
+        git_command(&self.root, &self.disabled_filters)
             .args(["rev-parse", "--verify", "HEAD"])
             .output()
             .is_ok_and(|output| output.status.success())
     }
+}
+
+fn git_command(directory: &Path, disabled_filters: &[String]) -> Command {
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(directory)
+        .args(["--no-optional-locks", "-c", "core.fsmonitor=false"]);
+    for filter in disabled_filters {
+        command.args(["-c", filter]);
+    }
+    command
+}
+
+fn configured_filter_commands(root: &Path) -> Result<Vec<String>, GitError> {
+    let output = git_command(root, &[])
+        .args([
+            "config",
+            "--null",
+            "--name-only",
+            "--get-regexp",
+            r"^filter\..*\.(clean|smudge|process|required)$",
+        ])
+        .output()
+        .map_err(|error| GitError::Command {
+            command: "config".into(),
+            details: error.to_string(),
+        })?;
+
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(command_error("config", output));
+    }
+
+    Ok(output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter_map(|key| std::str::from_utf8(key).ok())
+        .filter(|key| !key.is_empty())
+        .map(|key| {
+            if key.ends_with(".required") {
+                format!("{key}=false")
+            } else {
+                format!("{key}=")
+            }
+        })
+        .collect())
 }
 
 fn output_path(output: Output) -> Result<PathBuf, GitError> {
@@ -282,6 +325,43 @@ mod tests {
         let untracked_diff = repository.diff(untracked).unwrap();
         assert_eq!(untracked_diff.additions, 1);
         assert_eq!(untracked_diff.deletions, 0);
+    }
+
+    #[test]
+    fn does_not_run_repository_configured_filters() {
+        let id = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("zako-filter-test-{}-{id}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let _temporary_repository = TemporaryRepository(root.clone());
+
+        run_git(&root, &["init", "--quiet"]);
+        run_git(&root, &["config", "user.name", "Zako Tests"]);
+        run_git(&root, &["config", "user.email", "zako@example.invalid"]);
+        std::fs::write(root.join("tracked.rs"), "fn original() {}\n").unwrap();
+        std::fs::write(root.join(".gitattributes"), "tracked.rs filter=probe\n").unwrap();
+        run_git(&root, &["add", "tracked.rs", ".gitattributes"]);
+        run_git(&root, &["commit", "--quiet", "-m", "initial"]);
+
+        let marker = root.join("filter-ran");
+        let filter_command = format!("touch {}", marker.display());
+        run_git(&root, &["config", "filter.probe.clean", &filter_command]);
+        run_git(&root, &["config", "filter.probe.required", "true"]);
+        std::fs::write(root.join("tracked.rs"), "fn modified() {}\n").unwrap();
+
+        let repository = Repository::discover(&root).unwrap();
+        let status = repository.status().unwrap();
+        let tracked = status
+            .files
+            .iter()
+            .find(|file| file.display_path == "tracked.rs")
+            .unwrap();
+        repository.diff(tracked).unwrap();
+
+        assert!(!marker.exists(), "Git ran the configured clean filter");
     }
 
     fn run_git(root: &std::path::Path, args: &[&str]) {

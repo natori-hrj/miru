@@ -10,7 +10,7 @@ pub struct RepositoryWatcher {
 
 impl RepositoryWatcher {
     pub fn new(root: &Path, git_dir: &Path) -> notify::Result<Self> {
-        let (sender, events) = mpsc::channel();
+        let (sender, events) = mpsc::sync_channel(1);
         let git_dir = git_dir.to_path_buf();
         let watch_git_dir = !git_dir.starts_with(root);
         let filter_git_dir = git_dir.clone();
@@ -25,7 +25,7 @@ impl RepositoryWatcher {
                     !path.starts_with(&filter_git_dir) || path == &index_path || path == &head_path
                 });
             if relevant {
-                let _ = sender.send(());
+                let _ = sender.try_send(());
             }
         })?;
         watcher.watch(root, RecursiveMode::Recursive)?;

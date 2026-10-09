@@ -2,6 +2,8 @@ use gtk::gdk;
 
 pub const ADDED_BACKGROUND: &str = "#18201b";
 pub const REMOVED_BACKGROUND: &str = "#24191b";
+pub const ADDED_FOREGROUND: &str = "#9db3a2";
+pub const REMOVED_FOREGROUND: &str = "#bd999d";
 pub const HUNK_FOREGROUND: &str = "#99979b";
 pub const SOURCE_STYLE_SCHEME: &str = "oblivion";
 
@@ -11,70 +13,96 @@ window, .zako-root {
   color: #e0e0e1;
 }
 .zako-header {
-  background: #141415;
-  border-bottom: 1px solid #2d2d2f;
-  min-height: 38px;
-  padding: 0 12px;
+  background: #101011;
+  border-bottom: 1px solid #262628;
+  min-height: 40px;
+  padding: 0 14px;
 }
-.zako-title {
+.zako-brand {
   color: #e0e0e1;
-  font-weight: 600;
+  font-size: 11pt;
+  font-weight: 700;
 }
-.zako-muted {
-  color: #777579;
+.zako-header-separator {
+  color: #4a494d;
+  padding: 0 2px;
+}
+.zako-repo-name {
+  color: #929094;
+  font-family: monospace;
+  font-size: 9pt;
+}
+.zako-file-count {
+  color: #8f8d91;
+  font-family: monospace;
+  font-size: 9pt;
 }
 .zako-panel {
-  background: #141415;
+  background: #101011;
+  border-right: 1px solid #262628;
 }
 .zako-file-list {
-  background: #141415;
+  background: #101011;
+  padding: 2px 5px 8px;
 }
 .zako-file-list row {
-  min-height: 28px;
-  padding: 0 8px;
-  border-radius: 3px;
+  min-height: 30px;
+  padding: 0 7px;
+  margin: 1px 0;
+  border-radius: 4px;
+  border-left: 2px solid transparent;
 }
 .zako-file-list row:selected {
-  background: #252527;
-  outline: 1px solid #99979b;
-  outline-offset: -1px;
+  background: #1c1c1f;
+  border-left-color: #aaa8ac;
+  outline: none;
 }
 .zako-file-list row:hover:not(:selected) {
-  background: #1b1b1d;
+  background: #171719;
 }
 .zako-section-title {
-  color: #99979b;
-  font-size: 0.9em;
-  font-weight: 600;
-  padding: 11px 12px 8px;
-}
-.zako-separator {
-  background: #2d2d2f;
+  color: #777579;
+  font-size: 8pt;
+  font-weight: 700;
+  padding: 15px 14px 9px;
 }
 .zako-file-heading {
   background: #0b0b0c;
-  border-bottom: 1px solid #2d2d2f;
+  border-bottom: 1px solid #202022;
   color: #c9c8ca;
-  padding: 9px 13px;
+  padding: 11px 16px;
   font-family: monospace;
+  font-size: 9.5pt;
 }
 .zako-diff {
   background: #0b0b0c;
   color: #e0e0e1;
-  font-family: monospace;
-  font-size: 10.5pt;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10pt;
+}
+.zako-paned > separator {
+  background: #262628;
+  min-width: 1px;
+}
+.zako-status-line {
+  background: #101011;
+  border-top: 1px solid #262628;
+  min-height: 31px;
+  padding: 0 14px;
 }
 .zako-status {
-  background: #141415;
-  border-top: 1px solid #2d2d2f;
-  color: #777579;
-  min-height: 27px;
-  padding: 0 10px;
-  font-size: 0.9em;
+  color: #a09ea2;
+  font-family: monospace;
+  font-size: 9pt;
 }
-.zako-added { color: #9db9a3; }
-.zako-removed { color: #c39b9e; }
-.zako-error { color: #df9b9d; }
+.zako-hunk-status {
+  color: #777579;
+  font-family: monospace;
+  font-size: 8pt;
+}
+.zako-added { color: #9db3a2; }
+.zako-removed { color: #bd999d; }
+.zako-error { color: #d6989b; }
 "#;
 
 pub fn install() {

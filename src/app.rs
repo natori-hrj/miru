@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use gtk::prelude::*;
 
 use crate::git::{DiffDocument, Repository};
+use crate::theme::{ADDED_FOREGROUND, REMOVED_FOREGROUND};
 use crate::ui::{DiffView, build_file_list, install_shortcuts, make_file_row};
 use crate::watcher::RepositoryWatcher;
 
@@ -18,6 +19,7 @@ pub struct AppState {
     diff_view: DiffView,
     count_label: gtk::Label,
     status_label: gtk::Label,
+    hunk_label: gtk::Label,
     files: Vec<crate::git::ChangedFile>,
     selected_path: Option<PathBuf>,
     document: DiffDocument,
@@ -47,30 +49,47 @@ pub fn build(application: &gtk::Application, repository: Repository) {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("repository");
-    let title = gtk::Label::new(Some(&format!("Zako  ·  {repo_name}")));
-    title.add_css_class("zako-title");
-    header.set_title_widget(Some(&title));
-    let count_label = gtk::Label::new(Some("0 files"));
-    count_label.add_css_class("zako-muted");
+    window.set_title(Some(&format!("{repo_name} — Zako")));
+    let brand = gtk::Label::new(Some("zako"));
+    brand.add_css_class("zako-brand");
+    let separator = gtk::Label::new(Some("/"));
+    separator.add_css_class("zako-header-separator");
+    let repository_label = gtk::Label::new(Some(repo_name));
+    repository_label.add_css_class("zako-repo-name");
+    repository_label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
+    header.pack_start(&brand);
+    header.pack_start(&separator);
+    header.pack_start(&repository_label);
+    let count_label = gtk::Label::new(Some("0 FILES"));
+    count_label.add_css_class("zako-file-count");
     header.pack_end(&count_label);
 
     let (sidebar, file_list) = build_file_list();
     let diff_view = DiffView::new();
     let pane = gtk::Paned::new(gtk::Orientation::Horizontal);
+    pane.add_css_class("zako-paned");
     pane.set_start_child(Some(&sidebar));
     pane.set_end_child(Some(&diff_view.container));
-    pane.set_position(275);
+    pane.set_position(270);
     pane.set_resize_start_child(false);
     pane.set_shrink_start_child(false);
     pane.set_wide_handle(false);
     pane.set_vexpand(true);
 
-    let status_label = gtk::Label::new(Some("No changes"));
+    let status_line = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    status_line.add_css_class("zako-status-line");
+    let status_label = gtk::Label::new(Some("WORKING TREE CLEAN"));
     status_label.set_xalign(0.0);
+    status_label.set_hexpand(true);
     status_label.add_css_class("zako-status");
+    let hunk_label = gtk::Label::new(None);
+    hunk_label.set_xalign(1.0);
+    hunk_label.add_css_class("zako-hunk-status");
+    status_line.append(&status_label);
+    status_line.append(&hunk_label);
 
     root.append(&pane);
-    root.append(&status_label);
+    root.append(&status_line);
     window.set_titlebar(Some(&header));
     window.set_child(Some(&root));
 
@@ -91,6 +110,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
         diff_view,
         count_label,
         status_label,
+        hunk_label,
         files: Vec::new(),
         selected_path: None,
         document: DiffDocument::default(),
@@ -218,11 +238,12 @@ impl AppState {
                 self.status_label.remove_css_class("zako-error");
                 self.load_selected();
                 self.count_label
-                    .set_text(&format!("{} files", self.files.len()));
+                    .set_text(&format!("{} FILES", self.files.len()));
             }
             Err(error) => {
                 self.status_label.add_css_class("zako-error");
                 self.status_label.set_text(&error.to_string());
+                self.hunk_label.set_text("");
             }
         }
     }
@@ -261,6 +282,7 @@ impl AppState {
         };
         match self.repository.diff(file) {
             Ok(document) => {
+                self.status_label.remove_css_class("zako-error");
                 if self.document != document {
                     self.document = document;
                     self.current_hunk = self
@@ -276,23 +298,32 @@ impl AppState {
                 self.diff_view.show_error(&error.to_string());
                 self.status_label.add_css_class("zako-error");
                 self.status_label.set_text(&error.to_string());
+                self.hunk_label.set_text("");
             }
         }
     }
 
     fn update_status(&self) {
         let hunks = self.document.hunk_lines.len();
-        let hunk_label = if hunks == 0 {
-            "hunk 0 / 0".to_owned()
+        if self.files.is_empty() {
+            self.status_label.set_text("WORKING TREE CLEAN");
+            self.hunk_label.set_text("");
         } else {
-            format!("hunk {} / {hunks}", self.current_hunk + 1)
-        };
-        self.status_label.set_text(&format!(
-            "{} files    +{}  -{}    {hunk_label}",
-            self.files.len(),
-            self.document.additions,
-            self.document.deletions
-        ));
+            self.status_label.set_markup(&format!(
+                "<span foreground=\"{ADDED_FOREGROUND}\">+{}</span>    <span foreground=\"{REMOVED_FOREGROUND}\">−{}</span>",
+                self.document.additions,
+                self.document.deletions,
+            ));
+            if hunks == 0 {
+                self.hunk_label.set_text("");
+            } else {
+                self.hunk_label.set_text(&format!(
+                    "HUNK {:02} / {:02}",
+                    self.current_hunk + 1,
+                    hunks
+                ));
+            }
+        }
     }
 
     fn show_shortcuts(&self) {
