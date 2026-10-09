@@ -113,12 +113,6 @@ window, .zako-root {
   font-size: 8pt;
   margin-right: 18px;
 }
-.zako-comment-editor {
-  background: #141415;
-  color: #e0e0e1;
-  border: 1px solid #2d2d2f;
-  padding: 9px;
-}
 .zako-primary-action {
   background: #252527;
   border: 1px solid #49484b;

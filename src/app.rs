@@ -1,4 +1,4 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 use std::path::PathBuf;
@@ -13,10 +13,7 @@ use crate::review::{
     reconcile_file_comments,
 };
 use crate::theme::{ADDED_FOREGROUND, REMOVED_FOREGROUND};
-use crate::ui::{
-    DiffView, ReviewPanel, build_file_list, install_shortcuts, make_file_row,
-    present_comment_editor,
-};
+use crate::ui::{DiffView, ReviewPanel, build_file_list, install_shortcuts, make_file_row};
 use crate::watcher::RepositoryWatcher;
 
 pub struct AppState {
@@ -41,6 +38,7 @@ pub struct AppState {
     pending_key: Option<char>,
     focused_diff_line: Option<usize>,
     selection_anchor: Option<usize>,
+    pending_comment: Option<CommentDraft>,
     review_store: Option<ReviewStore>,
     review_load_error: Option<String>,
     review_save_error: Option<String>,
@@ -175,6 +173,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
         pending_key: None,
         focused_diff_line: None,
         selection_anchor: None,
+        pending_comment: None,
         review_store,
         review_load_error,
         review_save_error: None,
@@ -213,69 +212,15 @@ pub fn build(application: &gtk::Application, repository: Repository) {
     });
 
     let callback_state = state.clone();
-    let diff_view = state.borrow().diff_view.source_view.clone();
-    let click = gtk::GestureClick::new();
-    let click_state = callback_state.clone();
-    click.connect_pressed(move |gesture, _, x, y| {
-        let Some(widget) = gesture.widget() else {
+    let diff_buffer = state.borrow().diff_view.buffer().clone();
+    diff_buffer.connect_mark_set(move |_, iter, mark| {
+        if mark.name().as_deref() != Some("insert") {
             return;
-        };
-        let Ok(view) = widget.downcast::<sourceview::View>() else {
-            return;
-        };
-        let Some(iter) = view.iter_at_location(x as i32, y as i32) else {
-            return;
-        };
-        if let Ok(mut state) = click_state.try_borrow_mut() {
-            state.focus_mouse_line(iter.line() as usize);
+        }
+        if let Ok(mut state) = callback_state.try_borrow_mut() {
+            state.focus_buffer_line(iter.line() as usize);
         }
     });
-    diff_view.add_controller(click);
-    let drag_origin = Rc::new(Cell::new(None));
-    let drag = gtk::GestureDrag::new();
-    let drag_state = callback_state.clone();
-    let drag_origin_begin = drag_origin.clone();
-    drag.connect_drag_begin(move |gesture, x, y| {
-        drag_origin_begin.set(Some((x, y)));
-        let Some(widget) = gesture.widget() else {
-            return;
-        };
-        let Ok(view) = widget.downcast::<sourceview::View>() else {
-            return;
-        };
-        let Some(iter) = view.iter_at_location(x as i32, y as i32) else {
-            return;
-        };
-        if let Ok(mut state) = drag_state.try_borrow_mut() {
-            state.focus_mouse_line(iter.line() as usize);
-        }
-    });
-    let drag_state = callback_state.clone();
-    drag.connect_drag_update(move |gesture, dx, dy| {
-        if dx.abs() + dy.abs() < 3.0 {
-            return;
-        }
-        let Some((origin_x, origin_y)) = drag_origin.get() else {
-            return;
-        };
-        let Some(widget) = gesture.widget() else {
-            return;
-        };
-        let Ok(view) = widget.downcast::<sourceview::View>() else {
-            return;
-        };
-        let Some(anchor) = view.iter_at_location(origin_x as i32, origin_y as i32) else {
-            return;
-        };
-        let Some(focus) = view.iter_at_location((origin_x + dx) as i32, (origin_y + dy) as i32)
-        else {
-            return;
-        };
-        if let Ok(mut state) = drag_state.try_borrow_mut() {
-            state.select_mouse_range(anchor.line() as usize, focus.line() as usize);
-        }
-    });
-    diff_view.add_controller(drag);
 
     install_shortcuts(&window, &state);
     install_refresh_poll(&state);
@@ -346,9 +291,10 @@ impl AppState {
             '?' => self.show_shortcuts(),
             'C' => self.toggle_review_panel(),
             'v' => self.start_line_selection(),
-            'c' => self.begin_new_comment(shared),
+            'c' => self.begin_or_edit_comment(),
             'e' => self.open_editor(),
-            '\n' | '\r' => self.edit_comment_on_current_line(shared),
+            '\n' | '\r' => self.edit_comment_on_current_line(),
+            '\u{1b}' if self.pending_comment.is_some() => self.cancel_pending_comment(shared),
             '\u{1b}' => self.cancel_line_selection(),
             'q' => self.application.quit(),
             _ => return false,
@@ -537,7 +483,9 @@ impl AppState {
                     let comments = self.comments_for_file(&path);
                     self.diff_view
                         .show_document(Some(&path), &self.document, &comments);
-                    if let Some(line) = self.focused_diff_line {
+                    if !self.is_composing_comment()
+                        && let Some(line) = self.focused_diff_line
+                    {
                         self.diff_view.focus_line(line);
                     }
                 }
@@ -741,13 +689,65 @@ impl AppState {
         self.refresh_review_views(shared);
     }
 
+    pub fn save_pending_comment(&mut self, shared: &Rc<RefCell<AppState>>) {
+        let body = self.diff_view.inline_comment_body().unwrap_or_default();
+        if body.is_empty() {
+            self.status_label.set_text("Write a comment before saving.");
+            self.diff_view.focus_inline_comment();
+            return;
+        }
+        let Some(draft) = self.pending_comment.take() else {
+            return;
+        };
+        self.diff_view.end_inline_comment();
+        self.selection_anchor = None;
+        self.save_comment(draft.id.as_deref(), body, draft.target, shared);
+    }
+
+    pub fn cancel_pending_comment(&mut self, shared: &Rc<RefCell<AppState>>) {
+        self.pending_comment = None;
+        self.diff_view.end_inline_comment();
+        self.refresh_review_views(shared);
+    }
+
+    pub fn is_composing_comment(&self) -> bool {
+        self.diff_view.is_editing_comment()
+    }
+
+    pub fn backspace_empty_comment(&mut self, shared: &Rc<RefCell<AppState>>) -> bool {
+        if !self
+            .diff_view
+            .inline_comment_body()
+            .unwrap_or_default()
+            .is_empty()
+        {
+            return false;
+        }
+        let Some(id) = self
+            .pending_comment
+            .as_ref()
+            .and_then(|draft| draft.id.clone())
+        else {
+            return false;
+        };
+
+        self.pending_comment = None;
+        self.diff_view.end_inline_comment();
+        self.delete_comment(&id, shared);
+        self.diff_view.source_view.grab_focus();
+        self.status_label.set_text("Review comment deleted.");
+        true
+    }
+
     fn refresh_review_views(&self, shared: &Rc<RefCell<AppState>>) {
         self.rebuild_review_panel(shared);
         if let Some(path) = &self.selected_path {
             let comments = self.comments_for_file(path);
             self.diff_view
-                .show_document(Some(path), &self.document, &comments);
-            if let Some(line) = self.focused_diff_line {
+                .show_document_preserving_scroll(Some(path), &self.document, &comments);
+            if !self.is_composing_comment()
+                && let Some(line) = self.focused_diff_line
+            {
                 self.diff_view.focus_line(line);
             }
         }
@@ -767,28 +767,20 @@ impl AppState {
         self.update_status();
     }
 
-    fn select_mouse_range(&mut self, anchor: usize, focus: usize) {
-        let (Some(anchor), Some(focus)) = (
-            self.diff_view.document_line_at_buffer_line(anchor),
-            self.diff_view.document_line_at_buffer_line(focus),
-        ) else {
-            return;
-        };
-        if !self.document.lines.get(anchor).is_some_and(is_changed_line) {
+    fn focus_buffer_line(&mut self, buffer_line: usize) {
+        if self.pending_comment.is_some() {
             return;
         }
-        self.selection_anchor = Some(anchor);
-        self.focused_diff_line = Some(focus);
-        self.diff_view.select_display_range(anchor, focus);
-        self.update_status();
-    }
-
-    fn focus_mouse_line(&mut self, line: usize) {
-        let Some(line) = self.diff_view.document_line_at_buffer_line(line) else {
+        let Some(line) = self.diff_view.document_line_at_buffer_line(buffer_line) else {
             return;
         };
+        if self.focused_diff_line == Some(line) && self.selection_anchor.is_none() {
+            return;
+        }
+        self.focused_diff_line = Some(line);
         self.selection_anchor = None;
-        self.focus_diff_line(line);
+        self.diff_view.highlight_document_line(line);
+        self.update_status();
     }
 
     fn start_line_selection(&mut self) {
@@ -862,7 +854,7 @@ impl AppState {
         self.update_status();
     }
 
-    fn begin_new_comment(&mut self, shared: &Rc<RefCell<AppState>>) {
+    fn begin_new_comment(&mut self) {
         if self.review_store.is_none() {
             self.status_label.add_css_class("zako-error");
             self.status_label
@@ -918,41 +910,83 @@ impl AppState {
             anchor_hash: anchor.anchor_hash,
             anchor_line_count: anchor.anchor_line_count,
         };
-        let window = self.window.clone();
-        let shared = shared.clone();
-        present_comment_editor(&window, None, move |body| {
-            if let Ok(mut app) = shared.try_borrow_mut() {
-                app.save_comment(None, body, Some(target.clone()), &shared);
-            }
+        self.pending_comment = Some(CommentDraft {
+            id: None,
+            target: Some(target.clone()),
         });
+        self.diff_view
+            .begin_inline_comment(None, target.side, target.start_line, None);
+        let comments = self.comments_for_file(path);
+        self.diff_view
+            .show_document_preserving_scroll(Some(path), &self.document, &comments);
     }
 
-    fn edit_comment_on_current_line(&mut self, shared: &Rc<RefCell<AppState>>) {
-        let Some(index) = self.focused_diff_line else {
-            return;
-        };
-        let Some(line) = self.document.lines.get(index) else {
-            return;
-        };
+    fn begin_or_edit_comment(&mut self) {
+        if self.selection_anchor.is_none()
+            && let Some(comment) = self.comment_on_current_line()
+        {
+            self.start_edit_comment(comment);
+        } else {
+            self.begin_new_comment();
+        }
+    }
+
+    fn edit_comment_on_current_line(&mut self) {
+        if let Some(comment) = self.comment_on_current_line() {
+            self.start_edit_comment(comment);
+        }
+    }
+
+    fn comment_on_current_line(&self) -> Option<ReviewComment> {
+        let path = self.selected_path.as_ref()?.to_string_lossy();
+        let index = self.focused_diff_line?;
+        let line = self.document.lines.get(index)?;
         let (side, line_number) = match line.kind {
             crate::git::LineKind::Addition => (DiffSide::New, line.new_line),
             crate::git::LineKind::Deletion => (DiffSide::Old, line.old_line),
-            _ => return,
+            _ => return None,
         };
-        let Some(line_number) = line_number else {
-            return;
-        };
-        if let Some(comment) = self
-            .comments()
+        let line_number = line_number?;
+        self.comments()
             .iter()
             .find(|comment| {
-                comment.side == side
+                comment.file == path
+                    && !comment.stale
+                    && comment.side == side
                     && line_number >= comment.start_line
                     && line_number <= comment.end_line
             })
             .cloned()
+    }
+
+    fn start_edit_comment(&mut self, comment: ReviewComment) {
+        self.pending_comment = Some(CommentDraft {
+            id: Some(comment.id.clone()),
+            target: None,
+        });
+        let comments = self.comments_for_file(std::path::Path::new(&comment.file));
+        self.diff_view.begin_inline_comment(
+            Some(comment.id),
+            comment.side,
+            comment.start_line,
+            Some(&comment.body),
+        );
+        self.diff_view.show_document_preserving_scroll(
+            self.selected_path.as_deref(),
+            &self.document,
+            &comments,
+        );
+    }
+
+    fn start_edit_comment_by_id(&mut self, id: &str, shared: &Rc<RefCell<AppState>>) {
+        self.jump_to_comment(id, shared);
+        if let Some(comment) = self
+            .comments()
+            .iter()
+            .find(|comment| comment.id == id)
+            .cloned()
         {
-            show_edit_dialog(self.window.clone(), &comment, shared.clone());
+            self.start_edit_comment(comment);
         }
     }
 
@@ -1202,15 +1236,18 @@ impl AppState {
             .default_height(310)
             .build();
         let label = gtk::Label::new(Some(
-            "j / k       move through diff lines (↑ / ↓ also work)\n\
+            "← / →       move the text cursor by one character\n\
+             ↑ / ↓       move the text cursor by one line\n\
+             j / k       move one diff row; extend selection\n\
              ]f / [f    next / previous file\n\
              ]h / [h    next / previous hunk\n\
              ]c / [c    next / previous unresolved comment\n\
              gg          go to top\n\
              G           go to bottom\n\
              v           start line range selection\n\
-             c           comment on current line or range\n\
-             Enter       edit comment on current line\n\
+             c           create or edit comment on focused line\n\
+             Enter       save comment; edit focused comment\n\
+             Backspace   delete character; delete an empty edited comment\n\
              C           toggle review panel\n\
              e           open current location in $EDITOR\n\
              r           refresh repository\n\
@@ -1253,6 +1290,11 @@ struct CommentTarget {
     side: DiffSide,
     anchor_hash: String,
     anchor_line_count: usize,
+}
+
+struct CommentDraft {
+    id: Option<String>,
+    target: Option<CommentTarget>,
 }
 
 fn launch_editor_in_terminal(
@@ -1427,31 +1469,9 @@ fn find_anchored_line(document: &DiffDocument, anchor: &DiffLineAnchor) -> Optio
 }
 
 fn begin_edit_comment(shared: &Rc<RefCell<AppState>>, id: &str) {
-    let comment = {
-        let app = shared.borrow();
-        app.comments()
-            .iter()
-            .find(|comment| comment.id == id)
-            .cloned()
-    };
-    let Some(comment) = comment else {
-        return;
-    };
-    let window = shared.borrow().window.clone();
-    show_edit_dialog(window, &comment, shared.clone());
-}
-
-fn show_edit_dialog(
-    window: gtk::ApplicationWindow,
-    comment: &ReviewComment,
-    shared: Rc<RefCell<AppState>>,
-) {
-    let id = comment.id.clone();
-    present_comment_editor(&window, Some(&comment.body), move |body| {
-        if let Ok(mut app) = shared.try_borrow_mut() {
-            app.save_comment(Some(&id), body, None, &shared);
-        }
-    });
+    if let Ok(mut app) = shared.try_borrow_mut() {
+        app.start_edit_comment_by_id(id, shared);
+    }
 }
 
 fn install_refresh_poll(state: &Rc<RefCell<AppState>>) {

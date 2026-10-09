@@ -9,7 +9,24 @@ pub fn install_shortcuts(
     let controller = gtk::EventControllerKey::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
     let state = state.clone();
-    controller.connect_key_pressed(move |_, key, _, _| {
+    controller.connect_key_pressed(move |_, key, _, _modifiers| {
+        let composing_comment = state.borrow().is_composing_comment();
+        if composing_comment {
+            if key == gtk::gdk::Key::Escape {
+                state.borrow_mut().cancel_pending_comment(&state);
+                return gtk::glib::Propagation::Stop;
+            }
+            if key == gtk::gdk::Key::Return || key == gtk::gdk::Key::KP_Enter {
+                state.borrow_mut().save_pending_comment(&state);
+                return gtk::glib::Propagation::Stop;
+            }
+            if key == gtk::gdk::Key::BackSpace && state.borrow_mut().backspace_empty_comment(&state)
+            {
+                return gtk::glib::Propagation::Stop;
+            }
+            return gtk::glib::Propagation::Proceed;
+        }
+
         if key == gtk::gdk::Key::Tab {
             state.borrow_mut().toggle_sidebar();
             return gtk::glib::Propagation::Stop;
@@ -22,22 +39,9 @@ pub fn install_shortcuts(
             state.borrow_mut().handle_key('\n', &state);
             return gtk::glib::Propagation::Stop;
         }
-        if let Some(focus) = gtk::prelude::RootExt::focus(&state.borrow().window)
-            && let Ok(text_view) = focus.downcast::<gtk::TextView>()
-            && text_view.is_editable()
-        {
-            return gtk::glib::Propagation::Proceed;
-        }
 
-        let character = match key {
-            gtk::gdk::Key::Down => 'j',
-            gtk::gdk::Key::Up => 'k',
-            _ => {
-                let Some(character) = key.to_unicode() else {
-                    return gtk::glib::Propagation::Proceed;
-                };
-                character
-            }
+        let Some(character) = key.to_unicode() else {
+            return gtk::glib::Propagation::Proceed;
         };
 
         let mut app = state.borrow_mut();

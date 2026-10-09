@@ -11,10 +11,13 @@ use crate::theme::{
     REMOVED_BACKGROUND, RESOLVED_COMMENT_FOREGROUND, SOURCE_STYLE_SCHEME,
 };
 
+const COMMENT_SENTINEL: &str = "\u{200b}";
+
 pub struct DiffView {
     pub container: gtk::Box,
     pub heading: gtk::Label,
     pub source_view: sourceview::View,
+    scrolled: gtk::ScrolledWindow,
     buffer: sourceview::Buffer,
     added_tag: gtk::TextTag,
     removed_tag: gtk::TextTag,
@@ -24,10 +27,25 @@ pub struct DiffView {
     comment_body_tag: gtk::TextTag,
     focus_tag: gtk::TextTag,
     focus_marker_tag: gtk::TextTag,
+    read_only_tag: gtk::TextTag,
+    editable_tag: gtk::TextTag,
+    invisible_tag: gtk::TextTag,
     focused_document_line: Cell<Option<usize>>,
     document_to_buffer_line: RefCell<Vec<usize>>,
     buffer_to_document_line: RefCell<Vec<usize>>,
     focus_marker_offsets: RefCell<Vec<usize>>,
+    code_content_offsets: RefCell<Vec<usize>>,
+    editor_placement: RefCell<Option<EditorPlacement>>,
+    editor_body_start: RefCell<Option<gtk::TextMark>>,
+    editor_body_end: RefCell<Option<gtk::TextMark>>,
+}
+
+#[derive(Clone)]
+struct EditorPlacement {
+    comment_id: Option<String>,
+    side: DiffSide,
+    start_line: usize,
+    body: String,
 }
 
 impl DiffView {
@@ -71,6 +89,20 @@ impl DiffView {
             .name("zako-focused-diff-marker")
             .foreground("#e0e0e1")
             .build();
+        let read_only_tag = gtk::TextTag::builder()
+            .name("zako-diff-read-only")
+            .editable(false)
+            .editable_set(true)
+            .build();
+        let editable_tag = gtk::TextTag::builder()
+            .name("zako-comment-editable")
+            .editable(true)
+            .editable_set(true)
+            .build();
+        let invisible_tag = gtk::TextTag::builder()
+            .name("zako-comment-sentinel")
+            .invisible(true)
+            .build();
         let tag_table = buffer.tag_table();
         tag_table.add(&added_tag);
         tag_table.add(&removed_tag);
@@ -80,6 +112,9 @@ impl DiffView {
         tag_table.add(&comment_body_tag);
         tag_table.add(&focus_tag);
         tag_table.add(&focus_marker_tag);
+        tag_table.add(&read_only_tag);
+        tag_table.add(&editable_tag);
+        tag_table.add(&invisible_tag);
         buffer.set_highlight_syntax(true);
         if let Some(scheme) = sourceview::StyleSchemeManager::default().scheme(SOURCE_STYLE_SCHEME)
         {
@@ -87,7 +122,7 @@ impl DiffView {
         }
         let source_view = sourceview::View::with_buffer(&buffer);
         source_view.set_editable(false);
-        source_view.set_cursor_visible(false);
+        source_view.set_cursor_visible(true);
         source_view.set_monospace(true);
         source_view.set_show_line_numbers(false);
         source_view.set_tab_width(4);
@@ -110,6 +145,7 @@ impl DiffView {
             container,
             heading,
             source_view,
+            scrolled,
             buffer,
             added_tag,
             removed_tag,
@@ -119,10 +155,17 @@ impl DiffView {
             comment_body_tag,
             focus_tag,
             focus_marker_tag,
+            read_only_tag,
+            editable_tag,
+            invisible_tag,
             focused_document_line: Cell::new(None),
             document_to_buffer_line: RefCell::new(Vec::new()),
             buffer_to_document_line: RefCell::new(Vec::new()),
             focus_marker_offsets: RefCell::new(Vec::new()),
+            code_content_offsets: RefCell::new(Vec::new()),
+            editor_placement: RefCell::new(None),
+            editor_body_start: RefCell::new(None),
+            editor_body_end: RefCell::new(None),
         }
     }
 
@@ -132,10 +175,20 @@ impl DiffView {
         document: &DiffDocument,
         comments: &[ReviewComment],
     ) {
+        let mut placement = self.editor_placement.borrow().clone();
+        if let Some(active) = placement.as_mut() {
+            if let Some(body) = self.inline_comment_body() {
+                active.body = body;
+            }
+            self.editor_placement.replace(Some(active.clone()));
+        }
+        self.clear_editor_marks();
+        self.source_view.set_editable(false);
         self.focused_document_line.set(None);
         self.document_to_buffer_line.borrow_mut().clear();
         self.buffer_to_document_line.borrow_mut().clear();
         self.focus_marker_offsets.borrow_mut().clear();
+        self.code_content_offsets.borrow_mut().clear();
         let Some(path) = path else {
             self.heading.set_text("No changed files");
             self.buffer.set_text("The working tree is clean.");
@@ -151,13 +204,35 @@ impl DiffView {
         self.buffer.set_highlight_syntax(true);
 
         if document.lines.is_empty() {
-            self.buffer
-                .set_text("No textual diff is available for this file.");
+            if let Some(active) = placement.as_ref() {
+                let marker = if active.comment_id.is_some() {
+                    "!"
+                } else {
+                    "●"
+                };
+                let prefix = format!("            └─ {marker} ");
+                let body = compact_comment_body(&active.body);
+                self.buffer.set_text(&format!(
+                    "No textual diff is available.\n{prefix}{body}{COMMENT_SENTINEL}"
+                ));
+                let row = (self.buffer.line_count() - 1) as usize;
+                self.buffer_to_document_line.borrow_mut().push(0);
+                if let Some(start) = self.buffer.iter_at_line(row as i32) {
+                    let mut end = start;
+                    end.forward_to_line_end();
+                    self.buffer.apply_tag(&self.comment_body_tag, &start, &end);
+                }
+                self.activate_inline_comment(row, prefix.chars().count(), body.chars().count());
+            } else {
+                self.buffer
+                    .set_text("No textual diff is available for this file.");
+            }
             return;
         }
 
         let mut rendered = Vec::new();
         let mut comment_body_lines = Vec::new();
+        let mut editor_range = None;
         for (document_line, line) in document.lines.iter().enumerate() {
             self.document_to_buffer_line
                 .borrow_mut()
@@ -167,6 +242,9 @@ impl DiffView {
             self.focus_marker_offsets
                 .borrow_mut()
                 .push(old.len().max(5) + 1 + new.len().max(5) + 1);
+            self.code_content_offsets
+                .borrow_mut()
+                .push(old.len().max(5) + 1 + new.len().max(5) + 6);
             let focus_marker = if self.focused_document_line.get() == Some(document_line) {
                 "▸"
             } else {
@@ -186,17 +264,64 @@ impl DiffView {
                 .filter(|comment| !comment.stale && comment_starts_on_line(comment, line))
             {
                 let marker = if comment.resolved { "✓" } else { "●" };
-                let body = comment
-                    .body
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                rendered.push(format!("            └─ {marker} {body}"));
+                let is_editing = placement
+                    .as_ref()
+                    .and_then(|active| active.comment_id.as_deref())
+                    == Some(comment.id.as_str());
+                let prefix = format!("            └─ {marker} ");
+                let body = if is_editing {
+                    placement
+                        .as_ref()
+                        .map_or_else(String::new, |active| compact_comment_body(&active.body))
+                } else {
+                    compact_comment_body(&comment.body)
+                };
+                rendered.push(format!(
+                    "{prefix}{body}{}",
+                    if is_editing { COMMENT_SENTINEL } else { "" }
+                ));
+                if is_editing {
+                    editor_range = Some((
+                        rendered.len() - 1,
+                        prefix.chars().count(),
+                        body.chars().count(),
+                    ));
+                }
                 comment_body_lines.push(rendered.len() - 1);
                 self.buffer_to_document_line
                     .borrow_mut()
                     .push(document_line);
             }
+
+            if let Some(active) = placement
+                .as_ref()
+                .filter(|active| active.comment_id.is_none() && editor_targets_line(active, line))
+            {
+                let prefix = "            └─ ● ";
+                let body = compact_comment_body(&active.body);
+                rendered.push(format!("{prefix}{body}{COMMENT_SENTINEL}"));
+                editor_range = Some((
+                    rendered.len() - 1,
+                    prefix.chars().count(),
+                    body.chars().count(),
+                ));
+                comment_body_lines.push(rendered.len() - 1);
+                self.buffer_to_document_line
+                    .borrow_mut()
+                    .push(document_line);
+            }
+        }
+        if let Some(active) = placement.as_ref().filter(|_| editor_range.is_none()) {
+            let prefix = "            └─ ! ";
+            let body = compact_comment_body(&active.body);
+            rendered.push(format!("{prefix}{body}{COMMENT_SENTINEL}"));
+            editor_range = Some((
+                rendered.len() - 1,
+                prefix.chars().count(),
+                body.chars().count(),
+            ));
+            comment_body_lines.push(rendered.len() - 1);
+            self.buffer_to_document_line.borrow_mut().push(0);
         }
         let rendered = rendered.join("\n");
         self.buffer.set_text(&rendered);
@@ -211,7 +336,6 @@ impl DiffView {
                 self.buffer.apply_tag(&self.comment_body_tag, &start, &end);
             }
         }
-
         for (index, line) in document.lines.iter().enumerate() {
             let Some(buffer_line) = self.document_to_buffer_line.borrow().get(index).copied()
             else {
@@ -243,6 +367,29 @@ impl DiffView {
                 self.buffer.apply_tag(tag, &start, &end);
             }
         }
+
+        if let Some((line, prefix_length, body_length)) = editor_range {
+            self.activate_inline_comment(line, prefix_length, body_length);
+        }
+    }
+
+    pub fn show_document_preserving_scroll(
+        &self,
+        path: Option<&Path>,
+        document: &DiffDocument,
+        comments: &[ReviewComment],
+    ) {
+        let horizontal = self.scrolled.hadjustment();
+        let vertical = self.scrolled.vadjustment();
+        let horizontal_value = horizontal.value();
+        let vertical_value = vertical.value();
+
+        self.show_document(path, document, comments);
+
+        gtk::glib::idle_add_local_once(move || {
+            horizontal.set_value(horizontal_value);
+            vertical.set_value(vertical_value);
+        });
     }
 
     pub fn select_display_range(&self, anchor: usize, focus: usize) {
@@ -293,7 +440,23 @@ impl DiffView {
     }
 
     pub fn focus_line(&self, line: usize) {
-        self.select_display_range(line, line);
+        self.highlight_document_line(line);
+        let Some(buffer_line) = self.document_to_buffer_line.borrow().get(line).copied() else {
+            return;
+        };
+        let Some(content_offset) = self.code_content_offsets.borrow().get(line).copied() else {
+            return;
+        };
+        let Ok(buffer_line) = i32::try_from(buffer_line) else {
+            return;
+        };
+        let Some(mut iter) = self.buffer.iter_at_line(buffer_line) else {
+            return;
+        };
+        iter.forward_chars(content_offset as i32);
+        self.buffer.place_cursor(&iter);
+        self.source_view.grab_focus();
+        self.scroll_to_line(line);
     }
 
     pub fn selected_display_range(&self) -> Option<(usize, usize)> {
@@ -331,14 +494,134 @@ impl DiffView {
 
     pub fn show_error(&self, message: &str) {
         self.heading.set_text("Unable to load diff");
+        self.source_view.set_editable(false);
+        self.clear_editor_marks();
         self.buffer.set_text(message);
         self.document_to_buffer_line.borrow_mut().clear();
         self.buffer_to_document_line.borrow_mut().clear();
         self.focus_marker_offsets.borrow_mut().clear();
+        self.code_content_offsets.borrow_mut().clear();
     }
 
     pub fn document_line_at_buffer_line(&self, line: usize) -> Option<usize> {
         self.buffer_to_document_line.borrow().get(line).copied()
+    }
+
+    pub fn buffer(&self) -> &sourceview::Buffer {
+        &self.buffer
+    }
+
+    pub fn begin_inline_comment(
+        &self,
+        comment_id: Option<String>,
+        side: DiffSide,
+        start_line: usize,
+        body: Option<&str>,
+    ) {
+        self.clear_editor_marks();
+        self.source_view.set_editable(false);
+        self.editor_placement.replace(Some(EditorPlacement {
+            comment_id,
+            side,
+            start_line,
+            body: compact_comment_body(body.unwrap_or_default()),
+        }));
+    }
+
+    pub fn end_inline_comment(&self) {
+        self.editor_placement.borrow_mut().take();
+        self.clear_editor_marks();
+        self.source_view.set_editable(false);
+    }
+
+    pub fn is_editing_comment(&self) -> bool {
+        self.editor_placement.borrow().is_some()
+    }
+
+    pub fn inline_comment_body(&self) -> Option<String> {
+        let start_mark = self.editor_body_start.borrow();
+        let end_mark = self.editor_body_end.borrow();
+        let (Some(start_mark), Some(end_mark)) = (start_mark.as_ref(), end_mark.as_ref()) else {
+            return None;
+        };
+        let start = self.buffer.iter_at_mark(start_mark);
+        let end = self.buffer.iter_at_mark(end_mark);
+        Some(self.buffer.text(&start, &end, false).trim().to_owned())
+    }
+
+    pub fn focus_inline_comment(&self) {
+        if let Some(end_mark) = self.editor_body_end.borrow().as_ref() {
+            let end = self.buffer.iter_at_mark(end_mark);
+            self.buffer.place_cursor(&end);
+            self.source_view.grab_focus();
+        }
+    }
+
+    fn clear_editor_marks(&self) {
+        if let Some(mark) = self.editor_body_start.borrow_mut().take() {
+            self.buffer.delete_mark(&mark);
+        }
+        if let Some(mark) = self.editor_body_end.borrow_mut().take() {
+            self.buffer.delete_mark(&mark);
+        }
+    }
+
+    fn activate_inline_comment(
+        &self,
+        display_line: usize,
+        prefix_length: usize,
+        body_length: usize,
+    ) {
+        let Ok(display_line) = i32::try_from(display_line) else {
+            return;
+        };
+        let Some(mut body_start) = self.buffer.iter_at_line(display_line) else {
+            return;
+        };
+        body_start.forward_chars(prefix_length as i32);
+        let mut body_end = body_start;
+        body_end.forward_chars(body_length as i32);
+        let mut sentinel_end = body_end;
+        if !sentinel_end.forward_char() {
+            return;
+        }
+
+        let start = self.buffer.start_iter();
+        let end = self.buffer.end_iter();
+        self.buffer.apply_tag(&self.read_only_tag, &start, &end);
+        self.buffer
+            .remove_tag(&self.read_only_tag, &body_start, &sentinel_end);
+        self.buffer
+            .apply_tag(&self.editable_tag, &body_start, &sentinel_end);
+        self.buffer
+            .apply_tag(&self.invisible_tag, &body_end, &sentinel_end);
+
+        let start_mark = self.buffer.create_mark(None, &body_start, true);
+        let end_mark = self.buffer.create_mark(None, &body_end, false);
+        self.editor_body_start.replace(Some(start_mark));
+        self.editor_body_end.replace(Some(end_mark));
+        self.source_view.set_editable(true);
+        self.buffer.place_cursor(&body_end);
+        self.source_view.grab_focus();
+    }
+
+    pub fn highlight_document_line(&self, line: usize) {
+        if line >= self.document_to_buffer_line.borrow().len() {
+            return;
+        }
+        let buffer_start = self.buffer.start_iter();
+        let buffer_end = self.buffer.end_iter();
+        self.buffer
+            .remove_tag(&self.focus_tag, &buffer_start, &buffer_end);
+        self.set_focused_document_line(line);
+        if let Some(buffer_line) = self.document_to_buffer_line.borrow().get(line).copied()
+            && let Ok(buffer_line) = i32::try_from(buffer_line)
+            && let Some(start) = self.buffer.iter_at_line(buffer_line)
+        {
+            let mut end = start;
+            end.forward_to_line_end();
+            self.buffer.apply_tag(&self.focus_tag, &start, &end);
+        }
     }
 
     fn set_focused_document_line(&self, line: usize) {
@@ -456,4 +739,19 @@ fn comment_starts_on_line(comment: &ReviewComment, line: &DiffLine) -> bool {
             line.kind == LineKind::Addition && line.new_line == Some(comment.start_line)
         }
     }
+}
+
+fn editor_targets_line(placement: &EditorPlacement, line: &DiffLine) -> bool {
+    match placement.side {
+        DiffSide::Old => {
+            line.kind == LineKind::Deletion && line.old_line == Some(placement.start_line)
+        }
+        DiffSide::New => {
+            line.kind == LineKind::Addition && line.new_line == Some(placement.start_line)
+        }
+    }
+}
+
+fn compact_comment_body(body: &str) -> String {
+    body.split_whitespace().collect::<Vec<_>>().join(" ")
 }

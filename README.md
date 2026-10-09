@@ -72,7 +72,8 @@ directory must belong to a Git repository.
 1. Let your coding agent modify the repository.
 2. Open the repository with `zako .`.
 3. Select a changed line, or press `v` and use `j` / `k` to select a range.
-4. Press `c`, write a comment, and save with `Ctrl+Enter`.
+4. Press `c` and type directly after the comment marker under that line. Press
+   `Enter` or `Ctrl+Enter` to save.
 5. Export unresolved comments as Markdown:
 
    ```bash
@@ -110,26 +111,35 @@ tool. Stale comment locations are included and marked in the output.
 
 | Shortcut | Action |
 | --- | --- |
-| `j` / `k`, `↓` / `↑` | Move through diff lines; extend a range while selecting |
+| `←` / `→` | Move the text cursor by one character |
+| `↑` / `↓` | Move the text cursor by one line |
+| `j` / `k` | Move one diff row; extend a range while selecting |
 | `]f` / `[f` | Next / previous changed file |
 | `]h` / `[h` | Next / previous diff hunk |
 | `]c` / `[c` | Next / previous unresolved comment |
 | `gg` | Go to the top |
 | `G` | Go to the bottom |
 | `v` | Start a diff line range selection |
-| `c` | Comment on the focused line or selected range |
-| `Enter` | Edit the comment on the focused line, if any |
+| `c` | Add a comment, or edit the existing comment on the focused line |
+| `Enter` | Save a comment; open the focused comment for editing |
+| `Backspace` | Delete a character; when an edited comment is empty, delete it |
 | `C` | Toggle the review panel |
 | `e` | Open the focused file and line in `$EDITOR` |
 | `r` | Refresh repository state |
 | `Tab` | Toggle the changed-files sidebar |
 | `Ctrl+Enter` | Save a review comment |
-| `Esc` | Cancel selection or close the comment editor |
+| `Esc` | Cancel comment mode or line selection |
 | `?` | Show shortcut help |
 | `q` | Quit |
 
-Arrow keys and mouse scrolling continue to work. Click a changed line to focus
-it; drag across changed lines to select a range before adding a comment.
+Arrow keys move the text cursor through the diff, and mouse clicks place it at
+the clicked position. In comment mode, type directly after the `●` marker on
+the comment row below the target line. Press `Enter` or `Ctrl+Enter` to save,
+or `Esc` to cancel. Press `c` on an existing comment's diff line to edit it.
+Backspace removes text one character at a time; pressing it again when the
+comment is empty deletes that comment. The review panel also has Edit and
+Delete actions. Drag across changed lines to select a range before adding a
+comment.
 
 ## Project status
 
