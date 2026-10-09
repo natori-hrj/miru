@@ -5,6 +5,9 @@ pub const REMOVED_BACKGROUND: &str = "#24191b";
 pub const ADDED_FOREGROUND: &str = "#9db3a2";
 pub const REMOVED_FOREGROUND: &str = "#bd999d";
 pub const HUNK_FOREGROUND: &str = "#99979b";
+pub const COMMENT_FOREGROUND: &str = "#c5c3c7";
+pub const RESOLVED_COMMENT_FOREGROUND: &str = "#5f5e61";
+pub const COMMENT_FOCUS_BACKGROUND: &str = "#242426";
 pub const SOURCE_STYLE_SCHEME: &str = "oblivion";
 
 const STYLESHEET: &str = r#"
@@ -50,6 +53,78 @@ window, .zako-root {
   font-family: monospace;
   font-size: 9pt;
 }
+.zako-review-toggle, .zako-quiet-button {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  color: #929094;
+  min-height: 24px;
+  padding: 2px 7px;
+  font-size: 8pt;
+}
+.zako-review-toggle:hover, .zako-quiet-button:hover {
+  background: #1b1b1d;
+  border-color: #2d2d2f;
+  color: #e0e0e1;
+}
+.zako-review-panel {
+  background: #111112;
+  border-left: 1px solid #2d2d2f;
+}
+.zako-review-header {
+  background: #141415;
+  border-bottom: 1px solid #2d2d2f;
+  padding: 0 9px 0 1px;
+}
+.zako-review-file {
+  color: #929094;
+  font-family: monospace;
+  font-size: 8.5pt;
+  padding: 4px 2px;
+}
+.zako-comment-row {
+  background: #171718;
+  border-left: 2px solid #777579;
+  padding: 8px;
+}
+.zako-comment-unresolved { border-left-color: #c5c3c7; }
+.zako-comment-resolved { border-left-color: #4a494d; }
+.zako-comment-stale { border-left-color: #898184; }
+.zako-comment-location {
+  color: #c5c3c7;
+  font-family: monospace;
+  font-size: 8pt;
+}
+.zako-comment-resolved .zako-comment-location { color: #5f5e61; }
+.zako-comment-body {
+  color: #d0ced2;
+  font-size: 9pt;
+}
+.zako-comment-resolved .zako-comment-body { color: #777579; }
+.zako-comment-stale .zako-comment-location { color: #aaa0a2; }
+.zako-review-empty {
+  color: #777579;
+  font-size: 9pt;
+  padding: 8px 2px;
+}
+.zako-review-status {
+  color: #858388;
+  font-family: monospace;
+  font-size: 8pt;
+  margin-right: 18px;
+}
+.zako-comment-editor {
+  background: #141415;
+  color: #e0e0e1;
+  border: 1px solid #2d2d2f;
+  padding: 9px;
+}
+.zako-primary-action {
+  background: #252527;
+  border: 1px solid #49484b;
+  color: #e0e0e1;
+}
+.zako-primary-action:hover { background: #303033; }
 .zako-panel {
   background: #101011;
   border-right: 1px solid #262628;
@@ -92,6 +167,10 @@ window, .zako-root {
   color: #e0e0e1;
   font-family: "JetBrains Mono", monospace;
   font-size: 10pt;
+}
+.zako-diff text selection {
+  background-color: #303033;
+  color: #e0e0e1;
 }
 .zako-paned > separator {
   background: #262628;
