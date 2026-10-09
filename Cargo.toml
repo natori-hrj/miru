@@ -1,0 +1,18 @@
+[package]
+name = "zako"
+version = "0.1.0"
+edition = "2024"
+description = "A lightweight desktop diff viewer for reviewing agent-written code"
+license = "MIT OR Apache-2.0"
+rust-version = "1.92"
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.11" }
+sourceview = { package = "sourceview5", version = "0.11" }
+notify = "8.2"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
