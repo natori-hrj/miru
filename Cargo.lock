@@ -1131,7 +1131,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zako"
+name = "miru"
 version = "0.2.0"
 dependencies = [
  "clap",

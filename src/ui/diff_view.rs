@@ -53,54 +53,54 @@ impl DiffView {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
         let heading = gtk::Label::new(Some("Select a changed file"));
         heading.set_xalign(0.0);
-        heading.add_css_class("zako-file-heading");
+        heading.add_css_class("miru-file-heading");
 
         let buffer = sourceview::Buffer::new(None);
         let added_tag = gtk::TextTag::builder()
-            .name("zako-added-line")
+            .name("miru-added-line")
             .background(ADDED_BACKGROUND)
             .build();
         let removed_tag = gtk::TextTag::builder()
-            .name("zako-removed-line")
+            .name("miru-removed-line")
             .background(REMOVED_BACKGROUND)
             .build();
         let hunk_tag = gtk::TextTag::builder()
-            .name("zako-hunk-line")
+            .name("miru-hunk-line")
             .foreground(HUNK_FOREGROUND)
             .build();
         let comment_tag = gtk::TextTag::builder()
-            .name("zako-comment-line")
+            .name("miru-comment-line")
             .foreground(COMMENT_FOREGROUND)
             .build();
         let resolved_comment_tag = gtk::TextTag::builder()
-            .name("zako-resolved-comment-line")
+            .name("miru-resolved-comment-line")
             .foreground(RESOLVED_COMMENT_FOREGROUND)
             .build();
         let comment_body_tag = gtk::TextTag::builder()
-            .name("zako-comment-body-line")
+            .name("miru-comment-body-line")
             .foreground(COMMENT_FOREGROUND)
             .background("#171718")
             .build();
         let focus_tag = gtk::TextTag::builder()
-            .name("zako-focused-diff-line")
+            .name("miru-focused-diff-line")
             .background(COMMENT_FOCUS_BACKGROUND)
             .build();
         let focus_marker_tag = gtk::TextTag::builder()
-            .name("zako-focused-diff-marker")
+            .name("miru-focused-diff-marker")
             .foreground("#e0e0e1")
             .build();
         let read_only_tag = gtk::TextTag::builder()
-            .name("zako-diff-read-only")
+            .name("miru-diff-read-only")
             .editable(false)
             .editable_set(true)
             .build();
         let editable_tag = gtk::TextTag::builder()
-            .name("zako-comment-editable")
+            .name("miru-comment-editable")
             .editable(true)
             .editable_set(true)
             .build();
         let invisible_tag = gtk::TextTag::builder()
-            .name("zako-comment-sentinel")
+            .name("miru-comment-sentinel")
             .invisible(true)
             .build();
         let tag_table = buffer.tag_table();
@@ -127,7 +127,7 @@ impl DiffView {
         source_view.set_show_line_numbers(false);
         source_view.set_tab_width(4);
         source_view.set_wrap_mode(gtk::WrapMode::None);
-        source_view.add_css_class("zako-diff");
+        source_view.add_css_class("miru-diff");
         source_view.set_left_margin(12);
         source_view.set_right_margin(12);
         source_view.set_top_margin(10);

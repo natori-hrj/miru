@@ -291,13 +291,13 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("zako-test-{}-{id}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("miru-test-{}-{id}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         let _temporary_repository = TemporaryRepository(root.clone());
 
         run_git(&root, &["init", "--quiet"]);
-        run_git(&root, &["config", "user.name", "Zako Tests"]);
-        run_git(&root, &["config", "user.email", "zako@example.invalid"]);
+        run_git(&root, &["config", "user.name", "Miru Tests"]);
+        run_git(&root, &["config", "user.email", "miru@example.invalid"]);
         std::fs::write(root.join("tracked.rs"), "fn original() {}\n").unwrap();
         run_git(&root, &["add", "tracked.rs"]);
         run_git(&root, &["commit", "--quiet", "-m", "initial"]);
@@ -334,13 +334,13 @@ mod tests {
             .unwrap()
             .as_nanos();
         let root =
-            std::env::temp_dir().join(format!("zako-filter-test-{}-{id}", std::process::id()));
+            std::env::temp_dir().join(format!("miru-filter-test-{}-{id}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
         let _temporary_repository = TemporaryRepository(root.clone());
 
         run_git(&root, &["init", "--quiet"]);
-        run_git(&root, &["config", "user.name", "Zako Tests"]);
-        run_git(&root, &["config", "user.email", "zako@example.invalid"]);
+        run_git(&root, &["config", "user.name", "Miru Tests"]);
+        run_git(&root, &["config", "user.email", "miru@example.invalid"]);
         std::fs::write(root.join("tracked.rs"), "fn original() {}\n").unwrap();
         std::fs::write(root.join(".gitattributes"), "tracked.rs filter=probe\n").unwrap();
         run_git(&root, &["add", "tracked.rs", ".gitattributes"]);

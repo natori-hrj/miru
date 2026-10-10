@@ -104,7 +104,7 @@ impl ReviewStore {
             .map_err(|_| ReviewError::InvalidRepositoryPath(repository_root.to_path_buf()))?;
         let id = repository_id(&canonical_root)?;
         let path = data_home
-            .join("zako")
+            .join("miru")
             .join("reviews")
             .join(&id)
             .join("review.json");
@@ -349,7 +349,7 @@ mod tests {
                 .unwrap()
                 .as_nanos();
             let path =
-                std::env::temp_dir().join(format!("zako-review-{}-{nonce}", std::process::id()));
+                std::env::temp_dir().join(format!("miru-review-{}-{nonce}", std::process::id()));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
@@ -412,7 +412,7 @@ mod tests {
         let data_home = temp.0.join("data");
         fs::create_dir_all(&repository).unwrap();
         let id = repository_id(&repository).unwrap();
-        let path = data_home.join("zako/reviews").join(id).join("review.json");
+        let path = data_home.join("miru/reviews").join(id).join("review.json");
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, b"{").unwrap();
         assert!(ReviewStore::open_at(&repository, &data_home).is_err());
@@ -432,7 +432,7 @@ mod tests {
     fn refuses_dangling_storage_symlinks_into_the_repository() {
         let temp = TempTree::new();
         let repository = temp.0.join("repo");
-        let data_home = temp.0.join("data/zako/reviews");
+        let data_home = temp.0.join("data/miru/reviews");
         fs::create_dir_all(&repository).unwrap();
         fs::create_dir_all(&data_home).unwrap();
         let id = repository_id(&repository).unwrap();

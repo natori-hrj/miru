@@ -51,22 +51,22 @@ pub fn build(application: &gtk::Application, repository: Repository) {
 
     let window = gtk::ApplicationWindow::builder()
         .application(application)
-        .title("Zako")
+        .title("Miru")
         .default_width(1120)
         .default_height(740)
         .build();
 
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    root.add_css_class("zako-root");
+    root.add_css_class("miru-root");
 
     let header = gtk::HeaderBar::new();
-    header.add_css_class("zako-header");
+    header.add_css_class("miru-header");
     let sidebar_toggle_button = gtk::Button::with_label("‹");
-    sidebar_toggle_button.add_css_class("zako-sidebar-toggle");
+    sidebar_toggle_button.add_css_class("miru-sidebar-toggle");
     sidebar_toggle_button.set_tooltip_text(Some("Hide changed files (Tab)"));
     header.pack_start(&sidebar_toggle_button);
     let review_toggle_button = gtk::Button::with_label("Review");
-    review_toggle_button.add_css_class("zako-review-toggle");
+    review_toggle_button.add_css_class("miru-review-toggle");
     review_toggle_button.set_tooltip_text(Some("Toggle review comments (C)"));
     header.pack_start(&review_toggle_button);
     let repo_name = repository
@@ -74,19 +74,19 @@ pub fn build(application: &gtk::Application, repository: Repository) {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("repository");
-    window.set_title(Some(&format!("{repo_name} — Zako")));
-    let brand = gtk::Label::new(Some("zako"));
-    brand.add_css_class("zako-brand");
+    window.set_title(Some(&format!("{repo_name} — Miru")));
+    let brand = gtk::Label::new(Some("miru"));
+    brand.add_css_class("miru-brand");
     let separator = gtk::Label::new(Some("/"));
-    separator.add_css_class("zako-header-separator");
+    separator.add_css_class("miru-header-separator");
     let repository_label = gtk::Label::new(Some(repo_name));
-    repository_label.add_css_class("zako-repo-name");
+    repository_label.add_css_class("miru-repo-name");
     repository_label.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
     header.pack_start(&brand);
     header.pack_start(&separator);
     header.pack_start(&repository_label);
     let count_label = gtk::Label::new(Some("0 FILES"));
-    count_label.add_css_class("zako-file-count");
+    count_label.add_css_class("miru-file-count");
     header.pack_end(&count_label);
 
     let (sidebar, file_list) = build_file_list();
@@ -94,7 +94,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
     let review_panel = ReviewPanel::new();
     review_panel.container.set_visible(false);
     let review_split = gtk::Paned::new(gtk::Orientation::Horizontal);
-    review_split.add_css_class("zako-paned");
+    review_split.add_css_class("miru-paned");
     review_split.set_start_child(Some(&diff_view.container));
     review_split.set_end_child(Some(&review_panel.container));
     review_split.set_position(760);
@@ -102,7 +102,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
     review_split.set_shrink_start_child(false);
     review_split.set_wide_handle(false);
     let pane = gtk::Paned::new(gtk::Orientation::Horizontal);
-    pane.add_css_class("zako-paned");
+    pane.add_css_class("miru-paned");
     pane.set_start_child(Some(&sidebar));
     pane.set_end_child(Some(&review_split));
     pane.set_position(270);
@@ -112,20 +112,20 @@ pub fn build(application: &gtk::Application, repository: Repository) {
     pane.set_vexpand(true);
 
     let status_line = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    status_line.add_css_class("zako-status-line");
+    status_line.add_css_class("miru-status-line");
     let status_label = gtk::Label::new(Some("WORKING TREE CLEAN"));
     status_label.set_xalign(0.0);
     status_label.set_hexpand(true);
-    status_label.add_css_class("zako-status");
+    status_label.add_css_class("miru-status");
     let hunk_label = gtk::Label::new(None);
     hunk_label.set_xalign(1.0);
-    hunk_label.add_css_class("zako-hunk-status");
+    hunk_label.add_css_class("miru-hunk-status");
     let review_count_label = gtk::Label::new(None);
     review_count_label.set_xalign(1.0);
-    review_count_label.add_css_class("zako-review-status");
+    review_count_label.add_css_class("miru-review-status");
     let position_label = gtk::Label::new(None);
     position_label.set_xalign(1.0);
-    position_label.add_css_class("zako-hunk-status");
+    position_label.add_css_class("miru-hunk-status");
     status_line.append(&status_label);
     status_line.append(&review_count_label);
     status_line.append(&position_label);
@@ -139,7 +139,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
     let watcher = match RepositoryWatcher::new(repository.root(), repository.git_dir()) {
         Ok(watcher) => Some(watcher),
         Err(error) => {
-            eprintln!("zako: filesystem watching unavailable: {error}");
+            eprintln!("miru: filesystem watching unavailable: {error}");
             None
         }
     };
@@ -147,7 +147,7 @@ pub fn build(application: &gtk::Application, repository: Repository) {
     let (review_store, review_load_error) = match ReviewStore::open(repository.root()) {
         Ok(store) => (Some(store), None),
         Err(error) => {
-            eprintln!("zako: review data unavailable: {error}");
+            eprintln!("miru: review data unavailable: {error}");
             (None, Some(error.to_string()))
         }
     };
@@ -382,7 +382,7 @@ impl AppState {
                     self.rebuild_file_list();
                 }
                 self.sync_selected_row();
-                self.status_label.remove_css_class("zako-error");
+                self.status_label.remove_css_class("miru-error");
                 if stale_changed {
                     self.persist_reviews();
                 }
@@ -392,7 +392,7 @@ impl AppState {
                 self.rebuild_review_panel(shared);
             }
             Err(error) => {
-                self.status_label.add_css_class("zako-error");
+                self.status_label.add_css_class("miru-error");
                 self.status_label.set_text(&error.to_string());
                 self.hunk_label.set_text("");
             }
@@ -434,7 +434,7 @@ impl AppState {
         };
         match self.repository.diff(file) {
             Ok(document) => {
-                self.status_label.remove_css_class("zako-error");
+                self.status_label.remove_css_class("miru-error");
                 let before = self.comments_for_file(&path);
                 let file_key = path.to_string_lossy().into_owned();
                 if let Some(store) = &mut self.review_store {
@@ -496,7 +496,7 @@ impl AppState {
             }
             Err(error) => {
                 self.diff_view.show_error(&error.to_string());
-                self.status_label.add_css_class("zako-error");
+                self.status_label.add_css_class("miru-error");
                 self.status_label.set_text(&error.to_string());
                 self.hunk_label.set_text("");
             }
@@ -856,7 +856,7 @@ impl AppState {
 
     fn begin_new_comment(&mut self) {
         if self.review_store.is_none() {
-            self.status_label.add_css_class("zako-error");
+            self.status_label.add_css_class("miru-error");
             self.status_label
                 .set_text("Review storage is unavailable; comments cannot be saved.");
             return;
@@ -1103,7 +1103,7 @@ impl AppState {
         let line_number = line.new_line.or(line.old_line).unwrap_or(1);
         let Some(editor) = std::env::var_os("EDITOR") else {
             self.status_label
-                .set_text("Set $EDITOR to open files from Zako.");
+                .set_text("Set $EDITOR to open files from Miru.");
             return;
         };
         let Some(mut command_parts) = shlex::split(&editor.to_string_lossy()) else {
@@ -1151,7 +1151,7 @@ impl AppState {
                 .status_label
                 .set_text("Opened current location in $EDITOR."),
             Err(error) => {
-                self.status_label.add_css_class("zako-error");
+                self.status_label.add_css_class("miru-error");
                 self.status_label
                     .set_text(&format!("Could not start $EDITOR: {error}"));
             }
@@ -1160,7 +1160,7 @@ impl AppState {
 
     fn copy_review_to_clipboard(&mut self) {
         let Some(store) = &self.review_store else {
-            self.status_label.add_css_class("zako-error");
+            self.status_label.add_css_class("miru-error");
             self.status_label.set_text("Review data is unavailable.");
             return;
         };
@@ -1187,7 +1187,7 @@ impl AppState {
         self.position_label
             .set_text(&self.current_line_position().unwrap_or_default());
         if let Some(error) = &self.review_save_error {
-            self.status_label.add_css_class("zako-error");
+            self.status_label.add_css_class("miru-error");
             self.status_label
                 .set_text(&format!("Review save failed: {error}"));
         } else if self.files.is_empty() {
@@ -1229,7 +1229,7 @@ impl AppState {
 
     fn show_shortcuts(&self) {
         let help = gtk::Window::builder()
-            .title("Zako keyboard shortcuts")
+            .title("Miru keyboard shortcuts")
             .transient_for(&self.window)
             .modal(true)
             .default_width(380)

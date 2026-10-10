@@ -1,12 +1,12 @@
-# Zako
+# Miru
 
-Zako is a lightweight desktop diff viewer for reviewing agent-written code.
+Miru is a lightweight desktop diff viewer for reviewing agent-written code.
 It opens a local Git repository in a standalone GTK application and provides a
 small review loop for leaving precise feedback for a coding agent.
 
 ## Motivation
 
-AI coding agents can change several related files quickly. Zako keeps review
+AI coding agents can change several related files quickly. Miru keeps review
 focused on those local changes: read the unified diff, attach comments to
 changed lines, and export unresolved feedback for the agent. It is a native
 Linux application, not a browser interface or a full Git client.
@@ -32,7 +32,7 @@ _Screenshot coming soon._
 - A hideable review panel with jumps to comment locations and Markdown copy.
 - Markdown export and lightweight review list/status CLI commands.
 - Open the selected changed line in `$EDITOR` with `e`.
-- Read-only Git operations. Zako does not stage, commit, reset, check out, or
+- Read-only Git operations. Miru does not stage, commit, reset, check out, or
   discard changes. Review data is stored outside the working tree.
 
 ## Install prerequisites on Arch Linux
@@ -46,13 +46,13 @@ rustup default stable
 
 ## Build
 
-From the Zako source checkout, run:
+From the Miru source checkout, run:
 
 ```bash
 cargo build --release
 ```
 
-The executable is `target/release/zako`.
+The executable is `target/release/miru`.
 
 ## Usage
 
@@ -63,35 +63,35 @@ cargo run -- .
 cargo run -- /path/to/repository
 ```
 
-After installing the executable on your `PATH`, use `zako .` or `zako
-/path/to/repository`. With no path, Zako uses the current directory. The
+After installing the executable on your `PATH`, use `miru .` or `miru
+/path/to/repository`. With no path, Miru uses the current directory. The
 directory must belong to a Git repository.
 
 ### Agent review workflow
 
 1. Let your coding agent modify the repository.
-2. Open the repository with `zako .`.
+2. Open the repository with `miru .`.
 3. Select a changed line, or press `v` and use `j` / `k` to select a range.
 4. Press `c` and type directly after the comment marker under that line. Press
    `Enter` or `Ctrl+Enter` to save.
 5. Export unresolved comments as Markdown:
 
    ```bash
-   zako review export
+   miru review export
    ```
 
 6. Send the exported review instructions back to your coding agent. The panel's
    **Copy unresolved** action copies the same Markdown to the Wayland clipboard.
 
-Review comments are kept in `$XDG_DATA_HOME/zako/reviews/<repository-id>/`
-(`~/.local/share/zako/reviews/<repository-id>/review.json` by default). The
+Review comments are kept in `$XDG_DATA_HOME/miru/reviews/<repository-id>/`
+(`~/.local/share/miru/reviews/<repository-id>/review.json` by default). The
 repository ID is derived from the canonical repository path, so repositories
-with the same directory name remain separate. Zako never writes review files
+with the same directory name remain separate. Miru never writes review files
 into the Git working tree.
 
-The `e` shortcut launches the file and line through `$EDITOR`. Zako itself does
+The `e` shortcut launches the file and line through `$EDITOR`. Miru itself does
 not edit source files; the chosen editor retains its normal editing behavior.
-When `$EDITOR` is a terminal editor and Zako has no terminal attached, it uses
+When `$EDITOR` is a terminal editor and Miru has no terminal attached, it uses
 `$TERMINAL` or a detected terminal emulator.
 
 ### Review CLI
@@ -99,9 +99,9 @@ When `$EDITOR` is a terminal editor and Zako has no terminal attached, it uses
 Run these from inside a repository, or pass a repository path:
 
 ```bash
-zako review list [repository]
-zako review status [repository]
-zako review export [repository]
+miru review list [repository]
+miru review status [repository]
+miru review export [repository]
 ```
 
 `export` writes unresolved comments to stdout and can be piped to another
@@ -143,7 +143,7 @@ comment.
 
 ## Project status
 
-Zako 0.2.0 is an early local review tool. It supports unified diffs and
+Miru 0.2.0 is an early local review tool. It supports unified diffs and
 agent-agnostic Markdown export. It does not connect to code hosting services,
 modify Git state, or call AI services.
 
@@ -155,5 +155,5 @@ modify Git state, or call AI services.
 
 ## License
 
-Zako is dual licensed under [MIT](LICENSE-MIT) or
+Miru is dual licensed under [MIT](LICENSE-MIT) or
 [Apache License 2.0](LICENSE-APACHE), at your option.

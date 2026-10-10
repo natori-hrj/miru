@@ -4,16 +4,16 @@ use crate::git::ChangedFile;
 
 pub fn build_file_list() -> (gtk::Box, gtk::ListBox) {
     let panel = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    panel.add_css_class("zako-panel");
+    panel.add_css_class("miru-panel");
     panel.set_size_request(235, -1);
 
     let title = gtk::Label::new(Some("CHANGES"));
     title.set_xalign(0.0);
-    title.add_css_class("zako-section-title");
+    title.add_css_class("miru-section-title");
 
     let list = gtk::ListBox::new();
     list.set_selection_mode(gtk::SelectionMode::Single);
-    list.add_css_class("zako-file-list");
+    list.add_css_class("miru-file-list");
     let scrolled = gtk::ScrolledWindow::builder()
         .hexpand(true)
         .vexpand(true)
@@ -32,9 +32,9 @@ pub fn make_file_row(file: &ChangedFile) -> gtk::ListBoxRow {
     mark.set_width_chars(1);
     mark.set_xalign(0.5);
     mark.add_css_class(match file.marker {
-        'A' | '?' => "zako-added",
-        'D' => "zako-removed",
-        _ => "zako-muted",
+        'A' | '?' => "miru-added",
+        'D' => "miru-removed",
+        _ => "miru-muted",
     });
     let path = gtk::Label::new(Some(&file.display_path));
     path.set_xalign(0.0);

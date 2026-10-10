@@ -18,17 +18,17 @@ pub struct CommentRow {
 impl ReviewPanel {
     pub fn new() -> Self {
         let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        container.add_css_class("zako-review-panel");
+        container.add_css_class("miru-review-panel");
         container.set_size_request(290, -1);
 
         let header = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        header.add_css_class("zako-review-header");
+        header.add_css_class("miru-review-header");
         let title = gtk::Label::new(Some("REVIEW"));
         title.set_xalign(0.0);
         title.set_hexpand(true);
-        title.add_css_class("zako-section-title");
+        title.add_css_class("miru-section-title");
         let copy_button = gtk::Button::with_label("Copy unresolved");
-        copy_button.add_css_class("zako-quiet-button");
+        copy_button.add_css_class("miru-quiet-button");
         copy_button.set_tooltip_text(Some("Copy unresolved comments as Markdown"));
         header.append(&title);
         header.append(&copy_button);
@@ -65,7 +65,7 @@ impl ReviewPanel {
         heading.set_xalign(0.0);
         heading.set_ellipsize(gtk::pango::EllipsizeMode::Middle);
         heading.set_tooltip_text(Some(file));
-        heading.add_css_class("zako-review-file");
+        heading.add_css_class("miru-review-file");
         self.comments.append(&heading);
     }
 
@@ -74,19 +74,19 @@ impl ReviewPanel {
         label.set_xalign(0.0);
         label.set_yalign(0.0);
         label.set_wrap(true);
-        label.add_css_class("zako-review-empty");
+        label.add_css_class("miru-review-empty");
         self.comments.append(&label);
     }
 
     pub fn append_comment(&self, comment: &ReviewComment) -> CommentRow {
         let row = gtk::Box::new(gtk::Orientation::Vertical, 5);
-        row.add_css_class("zako-comment-row");
+        row.add_css_class("miru-comment-row");
         if comment.resolved {
-            row.add_css_class("zako-comment-resolved");
+            row.add_css_class("miru-comment-resolved");
         } else if comment.stale {
-            row.add_css_class("zako-comment-stale");
+            row.add_css_class("miru-comment-stale");
         } else {
-            row.add_css_class("zako-comment-unresolved");
+            row.add_css_class("miru-comment-unresolved");
         }
 
         let marker = if comment.resolved {
@@ -107,14 +107,14 @@ impl ReviewPanel {
             if comment.stale { " · stale" } else { "" },
         )));
         location.set_xalign(0.0);
-        location.add_css_class("zako-comment-location");
+        location.add_css_class("miru-comment-location");
 
         let body = gtk::Label::new(Some(comment.body.trim()));
         body.set_xalign(0.0);
         body.set_yalign(0.0);
         body.set_wrap(true);
         body.set_selectable(true);
-        body.add_css_class("zako-comment-body");
+        body.add_css_class("miru-comment-body");
 
         let actions = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         let jump = gtk::Button::with_label("Jump");
@@ -126,7 +126,7 @@ impl ReviewPanel {
         });
         let delete = gtk::Button::with_label("Delete");
         for button in [&jump, &edit, &resolve, &delete] {
-            button.add_css_class("zako-quiet-button");
+            button.add_css_class("miru-quiet-button");
         }
         actions.append(&jump);
         actions.append(&edit);

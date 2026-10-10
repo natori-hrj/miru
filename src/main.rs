@@ -12,7 +12,7 @@ use gtk::prelude::*;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "zako",
+    name = "miru",
     version,
     about = "A lightweight desktop diff viewer for reviewing agent-written code"
 )]
@@ -53,7 +53,7 @@ enum ReviewCommand {
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("zako: {error}");
+        eprintln!("miru: {error}");
         std::process::exit(1);
     }
 }
@@ -111,13 +111,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     let repository = git::Repository::discover(&target)?;
     let application = gtk::Application::builder()
-        .application_id("dev.zako.Zako")
+        .application_id("dev.miru.Miru")
         .flags(gtk::gio::ApplicationFlags::NON_UNIQUE)
         .build();
     application.connect_activate(move |application| {
         app::build(application, repository.clone());
     });
-    let program = std::env::args_os().next().unwrap_or_else(|| "zako".into());
+    let program = std::env::args_os().next().unwrap_or_else(|| "miru".into());
     application.run_with_args_os(&[program]);
     Ok(())
 }

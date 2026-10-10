@@ -1,5 +1,5 @@
 [package]
-name = "zako"
+name = "miru"
 version = "0.2.0"
 edition = "2024"
 description = "A lightweight desktop diff viewer for reviewing agent-written code"
